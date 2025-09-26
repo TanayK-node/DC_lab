@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package election;
+
+service Election {
+  rpc StartElection (ElectionRequest) returns (ElectionReply);
+  rpc DeclareCoordinator (CoordinatorMsg) returns (Ack);
+}
+
+message ElectionRequest {
+  string node_id = 1;
+}
+
+message ElectionReply {
+  bool higher_node_alive = 1;
+}
+
+message CoordinatorMsg {
+  string leader_id = 1;
+}
+
+message Ack {
+  bool ok = 1;
+}
