@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package meds;
+
+service Ledger {
+  rpc SubmitEvent (Event) returns (EventAck);
+  rpc VerifyBatch (VerifyRequest) returns (VerifyReply);
+  rpc GetChainHead (ChainHeadRequest) returns (ChainHeadReply);
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  BATCH_CREATED = 1;       // Factory
+  SHIPMENT_UPDATED = 2;    // Distributor
+  READY_FOR_SALE = 3;      // Pharmacy flags ready
+  SOLD_TO_PATIENT = 4;     // Pharmacy marks sold
+}
+
+message Event {
+  string request_id = 1;      
+  string actor_id = 2;        
+  EventType type = 3;         
+  string batch_id = 4;        
+  string payload_json = 5;    
+  bytes signature = 6;        
+  uint64 lamport_sent = 7;    
+}
+
+message EventAck {
+  bool accepted = 1;
+  string message = 2;
+  uint64 lamport_assigned = 3;
+}
+
+message VerifyRequest {
+  string request_id = 1;
+  string batch_id = 2;
+  uint64 lamport_sent = 3;
+}
+
+message VerifyReply {
+  bool authentic = 1;
+  string status = 2;          
+  string last_actor = 3;
+  uint64 lamport_observed = 4;
+}
+
+message ChainHeadRequest {}
+message ChainHeadReply {
+  uint64 height = 1;
+  uint64 lamport = 2;
+}
