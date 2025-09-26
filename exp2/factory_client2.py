@@ -5,7 +5,7 @@ import ledger_pb2 as pb, ledger_pb2_grpc as pbg
 
 lamport, lamport_lock = 0, threading.Lock()
 def get_next_lamport():
-    global lamport
+    global lamports
     with lamport_lock: lamport += 1; return lamport
 
 def create_batch(stub, batch_id):
