@@ -1,0 +1,48 @@
+syntax = "proto3";
+package med;
+
+service Ledger {
+  rpc RegisterBatch(Batch) returns (Ack);
+  rpc TransferBatch(Transfer) returns (Ack);
+  rpc VerifyBatch(VerifyRequest) returns (VerifyResponse);
+}
+
+message Batch {
+  string batch_id = 1;
+  string drug_name = 2;
+  string manufacturer_id = 3;
+  string expiry_date = 4;
+  string owner = 5;
+}
+
+message Transfer {
+  string batch_id = 1;
+  string from = 2;     // input → will map to request.from_ in Python
+  string to = 3;
+  string timestamp = 4;
+}
+
+message Ack {
+  bool ok = 1;
+  string message = 2;
+}
+
+message VerifyRequest {
+  string batch_id = 1;
+}
+
+message TransferRecord {
+  string from = 1;     // output → can safely use "from=" in Python
+  string to = 2;
+  string timestamp = 3;
+}
+
+message VerifyResponse {
+  bool found = 1;
+  string status = 2;
+  string current_owner = 3;
+  repeated TransferRecord history = 4;
+  string drug_name = 5;
+  string manufacturer_id = 6;
+  string expiry_date = 7;
+}
