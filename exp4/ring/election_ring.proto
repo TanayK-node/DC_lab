@@ -1,0 +1,30 @@
+syntax = "proto3";          // Proto version
+
+package election;           // Package name
+
+// ---- Election Messages ----
+
+// Token that circulates in the ring
+message RingElection {
+  repeated int32 candidate_ids = 1;   // IDs collected along the ring
+  int32 initiator_id = 2;             // Node that started the election
+}
+
+// Coordinator announcement
+message CoordinatorMsg {
+  string leader_id = 1;               // ID of elected leader
+}
+
+// Simple acknowledgement
+message Ack {
+  bool ok = 1;
+}
+
+// ---- Election Service ----
+service Election {
+  // Called when passing election token
+  rpc StartRingElection(RingElection) returns (Ack);
+
+  // Called when leader is chosen
+  rpc DeclareCoordinator(CoordinatorMsg) returns (Ack);
+}
