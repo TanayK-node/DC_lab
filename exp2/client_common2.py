@@ -1,7 +1,9 @@
 # client_common.py
 import grpc, uuid, json
-import ledger_pb2 as pb
-import ledger_pb2_grpc as pbg
+import ledger2_pb2 as pb
+import ledger2_pb2_grpc as pbg
+
+
 
 def make_channel(addr="localhost:50051"):
     return grpc.insecure_channel(addr)

@@ -4,8 +4,9 @@ from concurrent import futures
 from dataclasses import dataclass, field
 import grpc
 
-import ledger_pb2 as pb
-import ledger_pb2_grpc as pbg
+import ledger2_pb2 as pb
+import ledger2_pb2_grpc as pbg
+
 
 @dataclass(frozen=True)
 class ChainRecord:

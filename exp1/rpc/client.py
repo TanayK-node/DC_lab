@@ -1,45 +1,47 @@
 import grpc
-import datetime
-import DC_LAB.exp1.python.medicine_pb2 as pb
-import DC_LAB.exp1.python.medicine_pb2_grpc as pb_grpc
+import medicine_pb2 as pb
+import medicine_pb2_grpc as pb_grpc
 
 def run():
-    channel = grpc.insecure_channel('localhost:50051')
-    stub = pb_grpc.LedgerStub(channel)
+    # Connect to server
+    with grpc.insecure_channel('localhost:50051') as channel:
+        stub = pb_grpc.MedicineLedgerStub(channel)
 
-    # 1) Factory registers batch
-    ack = stub.RegisterBatch(pb.Batch(
-        batch_id="M123",
-        drug_name="Paracetamol 500mg",
-        manufacturer_id="MF-ACME",
-        expiry_date="2026-12-31",
-        owner="Factory"
-    ))
-    print("Register:", ack.ok, ack.message)
+        # Step 1: Register
+        response = stub.RegisterMedicine(pb.RegisterMedicineRequest(
+            batch_id="batch001",
+            owner="Factory"
+        ))
+        print(response.message)
 
-    # 2) Transfer Factory -> Distributor
-    ack = stub.TransferBatch(pb.Transfer(
-        batch_id="M123",
-        from="Factory",   # <-- MUST be 'from' (proto field name)
-        to="Distributor D45",
-        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat()
-    ))
-    print("F->D:", ack.ok, ack.message)
+        # Step 2: Transfer Factory -> Distributor
+        response = stub.TransferMedicine(pb.TransferMedicineRequest(
+            batch_id="batch001",
+            from_party="Factory",             # matches proto field
+            to_party="Distributor D45"
+        ))
+        print("F->D:", response.message)
 
-    # 3) Transfer Distributor -> Pharmacy
-    ack = stub.TransferBatch(pb.Transfer(
-        batch_id="M123",
-        from="Distributor D45",   # <-- 'from' again
-        to="Pharmacy P17",
-        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat()
-    ))
-    print("D->P:", ack.ok, ack.message)
+        # Step 3: Transfer Distributor -> Pharmacy
+        response = stub.TransferMedicine(pb.TransferMedicineRequest(
+            batch_id="batch001",
+            from_party="Distributor D45",     # matches proto field
+            to_party="Pharmacy P17"
+        ))
+        print("D->P:", response.message)
 
-    # 4) Patient verifies
-    v = stub.VerifyBatch(pb.VerifyRequest(batch_id="M123"))
-    print("Found:", v.found, "Owner:", v.current_owner, "Status:", v.status)
-    for rec in v.history:
-        print(f"- {rec.timestamp}: {rec.from} -> {rec.to}")
+        # Step 4: Verify
+        verify = stub.VerifyMedicine(pb.VerifyMedicineRequest(
+            batch_id="batch001"
+        ))
+        status = "READY_FOR_SALE" if verify.exists else "NOT_FOUND"
+        print(f"Found: {verify.exists} Owner: {verify.owner} Status: {status}")
 
-if __name__ == '__main__':
+        # Step 5: Get History
+        print("\n--- Transfer History ---")
+        history = stub.GetHistory(pb.GetHistoryRequest(batch_id="batch001"))
+        for record in history.records:
+            print(f"- {record.timestamp}: {record.from_party} -> {record.to_party}")
+
+if __name__ == "__main__":
     run()

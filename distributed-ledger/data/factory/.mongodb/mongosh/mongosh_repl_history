@@ -1,0 +1,4 @@
+db.medicines.find().pretty()
+show collections
+use myledger
+show dbs

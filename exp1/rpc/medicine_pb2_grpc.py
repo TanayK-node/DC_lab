@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import DC_LAB.exp1.python.medicine_pb2 as medicine__pb2
+import medicine_pb2 as medicine__pb2
 
 GRPC_GENERATED_VERSION = '1.74.0'
 GRPC_VERSION = grpc.__version__

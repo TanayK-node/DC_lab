@@ -1,8 +1,10 @@
 import grpc
 import time
 from concurrent import futures
-import DC_LAB.exp1.python.medicine_pb2 as pb
-import DC_LAB.exp1.python.medicine_pb2_grpc as pb_grpc
+import medicine_pb2 as pb
+import medicine_pb2_grpc as pb_grpc
+
+
 
 # In-memory stores
 batches = {}
