@@ -6,7 +6,6 @@ import ledger_pb2_grpc
 
 class LedgerServiceServicer(ledger_pb2_grpc.LedgerServiceServicer):
     def __init__(self):
-        # Connect to distributor database running in Docker on port 27018
         self.client = MongoClient("mongodb://localhost:27018/")
         self.db = self.client["distributor_ledger"]
         self.col = self.db["transactions"]
@@ -19,7 +18,7 @@ class LedgerServiceServicer(ledger_pb2_grpc.LedgerServiceServicer):
             "status": request.status
         }
         self.col.insert_one(data)
-        print(f"📦 Recorded at Distributor: {data}")
+        print(f"🚚 Distributor replicated: {data}")
         return ledger_pb2.TransactionResponse(message="Transaction recorded at Distributor.")
 
     def GetLedger(self, request, context):

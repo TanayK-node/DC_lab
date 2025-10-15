@@ -1,83 +1,72 @@
-# ledger_node.py
-import json, threading, queue, time
-from concurrent import futures
-from dataclasses import dataclass, field
 import grpc
+from concurrent import futures
+from pymongo import MongoClient
+import ledger_pb2
+import ledger_pb2_grpc
+import threading
 
-import ledger_pb2 as pb
-import ledger_pb2_grpc as pbg
+REPLICA_PORTS = [50052, 50053]  # distributor + pharmacy
 
-@dataclass(frozen=True)
-class ChainRecord:
-    index: int
-    event_type: pb.EventType
-    batch_id: str
-    payload_json: str
-    actor_id: str
-    lamport_assigned: int
-    request_id: str
-
-class AppendOnlyLedger:
+class LedgerServiceServicer(ledger_pb2_grpc.LedgerServiceServicer):
     def __init__(self):
-        self._lock = threading.RLock()
-        self._chain, self._processed, self._lamport = [], set(), 0
+        self.client = MongoClient("mongodb://localhost:27017/")
+        self.db = self.client["factory_ledger"]
+        self.col = self.db["transactions"]
 
-    def _bump_lamport(self, incoming):
-        self._lamport = max(self._lamport, incoming) + 1
-        return self._lamport
+    def propagate_to_replicas(self, data):
+        """Push data to distributor and pharmacy replicas."""
+        for port in REPLICA_PORTS:
+            try:
+                with grpc.insecure_channel(f'localhost:{port}') as channel:
+                    stub = ledger_pb2_grpc.LedgerServiceStub(channel)
+                    stub.RecordTransaction(ledger_pb2.TransactionRequest(
+                        batch_id=data["batch_id"],
+                        sender=data["sender"],
+                        receiver=data["receiver"],
+                        status=data["status"]
+                    ))
+                print(f"✅ Replicated to node on port {port}")
+            except Exception as e:
+                print(f"⚠️ Replication failed for port {port}: {e}")
 
-    def append_if_new(self, ev: pb.Event) -> tuple[bool, int, str]:
-        with self._lock:
-            if ev.request_id in self._processed:
-                for r in reversed(self._chain):
-                    if r.request_id == ev.request_id:
-                        return True, r.lamport_assigned, "duplicate_request_id_accepted"
-                return True, self._lamport, "duplicate_request_id_accepted"
+    def RecordTransaction(self, request, context):
+        data = {
+            "batch_id": request.batch_id,
+            "sender": request.sender,
+            "receiver": request.receiver,
+            "status": request.status
+        }
+        # Save to local ledger
+        self.col.insert_one(data)
+        print(f"🏭 Factory recorded: {data}")
 
-            lamport = self._bump_lamport(ev.lamport_sent)
-            rec = ChainRecord(len(self._chain), ev.type, ev.batch_id, ev.payload_json,
-                              ev.actor_id, lamport, ev.request_id)
-            self._chain.append(rec); self._processed.add(ev.request_id)
-            return True, lamport, "appended"
+        # ========== CONSISTENCY MODEL ==========
+        # OPTION A: STRONG CONSISTENCY (wait for all replicas before confirming)
+        # self.propagate_to_replicas(data)
+        # return ledger_pb2.TransactionResponse(message="Recorded & replicated (Strong Consistency).")
 
-    def verify_batch(self, batch_id: str, lamport_sent: int):
-        with self._lock:
-            lamport = self._bump_lamport(lamport_sent)
-            status, last_actor = "UNKNOWN", ""
-            for r in reversed(self._chain):
-                if r.batch_id == batch_id:
-                    if r.event_type == pb.BATCH_CREATED: status="CREATED"
-                    elif r.event_type == pb.SHIPMENT_UPDATED: status="IN_TRANSIT"
-                    elif r.event_type == pb.READY_FOR_SALE: status="READY_FOR_SALE"
-                    elif r.event_type == pb.SOLD_TO_PATIENT: status="SOLD"
-                    last_actor = r.actor_id; break
-            return status!="UNKNOWN", status, last_actor, lamport
+        # OPTION B: EVENTUAL CONSISTENCY (replicate asynchronously)
+        threading.Thread(target=self.propagate_to_replicas, args=(data,)).start()
+        return ledger_pb2.TransactionResponse(message="Recorded at Factory (Eventual Consistency).")
 
-    def head(self): 
-        with self._lock: return len(self._chain), self._lamport
+    def GetLedger(self, request, context):
+        entries = []
+        for tx in self.col.find():
+            entries.append(ledger_pb2.LedgerEntry(
+                batch_id=tx["batch_id"],
+                sender=tx["sender"],
+                receiver=tx["receiver"],
+                status=tx["status"]
+            ))
+        return ledger_pb2.LedgerData(entries=entries)
 
-@dataclass
-class WorkItem:
-    ev: pb.Event
-    ctx: grpc.ServicerContext
-    result_event: threading.Event = field(default_factory=threading.Event)
-    result: tuple[bool, int, str] | None = None
+def serve():
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    ledger_pb2_grpc.add_LedgerServiceServicer_to_server(LedgerServiceServicer(), server)
+    server.add_insecure_port('[::]:50051')
+    server.start()
+    print("🏭 Factory node running on port 50051...")
+    server.wait_for_termination()
 
-class WorkerPool:
-    def __init__(self, ledger: AppendOnlyLedger, n_workers=4):
-        self.q, self.ledger, self._stop, self.workers = queue.Queue(), ledger, threading.Event(), []
-        for i in range(n_workers):
-            t=threading.Thread(target=self._run, name=f"worker-{i}", daemon=True)
-            t.start(); self.workers.append(t)
-
-    def _run(self):
-        while not self._stop.is_set():
-            try: item=self.q.get(timeout=0.25)
-            except queue.Empty: continue
-            try: item.result=self.ledger.append_if_new(item.ev)
-            except Exception as e: item.result=(False,0,f"error:{e}")
-            finally: item.result_event.set(); self.q.task_done()
-
-    def submit(self, item: WorkItem): self.q.put(item)
-    def stop(self):
-        self.
+if __name__ == "__main__":
+    serve()
